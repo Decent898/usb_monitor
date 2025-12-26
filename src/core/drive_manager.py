@@ -8,6 +8,8 @@
 import os
 import shutil
 import subprocess
+import platform
+import string
 from pathlib import Path
 from typing import List, Dict, Optional
 
@@ -23,6 +25,20 @@ class DriveManager:
         Returns:
             驱动器信息列表
         """
+        system = platform.system()
+        
+        if system == "Darwin":  # macOS
+            return DriveManager._scan_macos_drives()
+        elif system == "Windows":
+            return DriveManager._scan_windows_drives()
+        elif system == "Linux":
+            return DriveManager._scan_linux_drives()
+        
+        return []
+    
+    @staticmethod
+    def _scan_macos_drives() -> List[Dict[str, str]]:
+        """扫描 macOS 上的驱动器"""
         volumes_path = Path('/Volumes')
         drives = []
         
@@ -38,6 +54,42 @@ class DriveManager:
                 drive_info = DriveManager._get_drive_info(volume)
                 if drive_info:
                     drives.append(drive_info)
+        
+        return drives
+    
+    @staticmethod
+    def _scan_windows_drives() -> List[Dict[str, str]]:
+        """扫描 Windows 上的驱动器"""
+        drives = []
+        
+        # 扫描所有磁盘驱动器（A-Z）
+        for drive_letter in string.ascii_uppercase:
+            drive_path = Path(f"{drive_letter}:/")
+            if drive_path.exists():
+                try:
+                    drive_info = DriveManager._get_drive_info(drive_path)
+                    if drive_info:
+                        drives.append(drive_info)
+                except Exception:
+                    pass
+        
+        return drives
+    
+    @staticmethod
+    def _scan_linux_drives() -> List[Dict[str, str]]:
+        """扫描 Linux 上的驱动器"""
+        drives = []
+        mount_path = Path('/mnt')
+        
+        if mount_path.exists():
+            for mount_point in mount_path.iterdir():
+                if mount_point.is_dir():
+                    try:
+                        drive_info = DriveManager._get_drive_info(mount_point)
+                        if drive_info:
+                            drives.append(drive_info)
+                    except Exception:
+                        pass
         
         return drives
     
@@ -88,20 +140,61 @@ class DriveManager:
         Returns:
             文件系统类型字符串
         """
-        try:
-            result = subprocess.run(
-                ['diskutil', 'info', str(volume)],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            
-            if result.returncode == 0:
-                for line in result.stdout.split('\n'):
-                    if 'File System Personality' in line or 'Type (Bundle)' in line:
-                        return line.split(':')[-1].strip()
-        except Exception:
-            pass
+        system = platform.system()
+        
+        if system == "Darwin":  # macOS
+            try:
+                result = subprocess.run(
+                    ['diskutil', 'info', str(volume)],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                
+                if result.returncode == 0:
+                    for line in result.stdout.split('\n'):
+                        if 'File System Personality' in line or 'Type (Bundle)' in line:
+                            return line.split(':')[-1].strip()
+            except Exception:
+                pass
+        
+        elif system == "Windows":
+            try:
+                # 使用 wmic 获取文件系统类型
+                drive_letter = str(volume)[0]
+                result = subprocess.run(
+                    f'wmic logicaldisk where name="{drive_letter}:" get filesystem',
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    shell=True,
+                    encoding='gbk'
+                )
+                
+                if result.returncode == 0:
+                    lines = result.stdout.strip().split('\n')
+                    if len(lines) >= 2:
+                        return lines[1].strip()
+            except Exception:
+                pass
+        
+        elif system == "Linux":
+            try:
+                result = subprocess.run(
+                    ['df', str(volume)],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                
+                if result.returncode == 0:
+                    lines = result.stdout.strip().split('\n')
+                    if len(lines) >= 2:
+                        parts = lines[1].split()
+                        if len(parts) >= 1:
+                            return parts[0]
+            except Exception:
+                pass
         
         return "Unknown"
     

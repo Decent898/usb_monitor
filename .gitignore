@@ -28,3 +28,4 @@ ENV/
 dist/
 build/
 *.egg-info/
+.history/
