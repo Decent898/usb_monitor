@@ -195,35 +195,28 @@ class USBManagerWindow(QMainWindow):
         # 创建传输线程
         self.transfer_thread = FileTransferThread(str(source_path), str(dest_path))
         self.transfer_thread.progress.connect(self.update_progress)
-        self.transfer_thread.speed.connect(self.update_speed)
         self.transfer_thread.finished.connect(self.transfer_finished)
-        self.transfer_thread.error.connect(self.transfer_error)
         self.transfer_thread.start()
         
         self.statusBar().showMessage(f"📤 正在上传: {source_path.name}")
     
-    def update_progress(self, value):
-        """更新进度"""
-        self.ui.progressBar.setValue(value)
+    def update_progress(self, progress_percent, speed_text):
+        """更新进度和速度"""
+        self.ui.progressBar.setValue(progress_percent)
+        self.ui.speedLabel.setText(f"传输速度: {speed_text}")
     
-    def update_speed(self, speed):
-        """更新传输速度"""
-        self.ui.speedLabel.setText(f"传输速度: {speed:.2f} MB/s")
-    
-    def transfer_finished(self):
+    def transfer_finished(self, success, message):
         """传输完成"""
         self.ui.progressBar.setVisible(False)
         self.ui.speedLabel.setVisible(False)
         self.refresh_file_list()
-        QMessageBox.information(self, "成功", "文件上传成功！")
-        self.statusBar().showMessage("✅ 文件上传成功")
-    
-    def transfer_error(self, error_msg):
-        """传输错误"""
-        self.ui.progressBar.setVisible(False)
-        self.ui.speedLabel.setVisible(False)
-        QMessageBox.critical(self, "错误", f"文件上传失败: {error_msg}")
-        self.statusBar().showMessage(f"❌ 上传失败: {error_msg}")
+        
+        if success:
+            QMessageBox.information(self, "成功", message)
+            self.statusBar().showMessage(f"✅ {message}")
+        else:
+            QMessageBox.warning(self, "失败", message)
+            self.statusBar().showMessage(f"❌ {message}")
     
     def delete_file(self, file_path):
         """删除文件"""
