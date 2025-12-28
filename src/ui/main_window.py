@@ -7,7 +7,7 @@
 
 import getpass
 from pathlib import Path
-from PyQt6.QtWidgets import QMainWindow, QTableWidgetItem, QFileDialog, QMessageBox, QPushButton
+from PyQt6.QtWidgets import QMainWindow, QTableWidgetItem, QFileDialog, QMessageBox, QPushButton, QHeaderView
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
 
@@ -74,6 +74,11 @@ class USBManagerWindow(QMainWindow):
         # 隐藏进度相关控件
         self.ui.progressBar.setVisible(False)
         self.ui.speedLabel.setVisible(False)
+
+        # 设置表格列宽自适应 - 让所有表格的列充满宽度
+        self.ui.usbTable.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.ui.drivesTable.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.ui.filesTable.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
     
     def connect_signals(self):
         """连接信号和槽"""
@@ -83,6 +88,14 @@ class USBManagerWindow(QMainWindow):
         self.ui.uploadFileBtn.clicked.connect(self.upload_file)
         self.ui.showHiddenCheck.stateChanged.connect(self.refresh_file_list)
         self.ui.drivesTable.itemSelectionChanged.connect(self.on_drive_selected)
+
+    def create_table_item(self, text):
+        """创建一个带有工具提示的表格项"""
+        item_text = str(text)
+        item = QTableWidgetItem(item_text)
+        # 设置工具提示，当鼠标悬停时显示完整内容
+        item.setToolTip(item_text)
+        return item
     
     def scan_usb_devices(self):
         """扫描 USB 设备"""
@@ -92,12 +105,12 @@ class USBManagerWindow(QMainWindow):
         self.ui.usbTable.setRowCount(len(devices))
         
         for row, device in enumerate(devices):
-            self.ui.usbTable.setItem(row, 0, QTableWidgetItem(device['name']))
-            self.ui.usbTable.setItem(row, 1, QTableWidgetItem(device['manufacturer']))
-            self.ui.usbTable.setItem(row, 2, QTableWidgetItem(device['serial']))
-            self.ui.usbTable.setItem(row, 3, QTableWidgetItem(device['bus']))
-            self.ui.usbTable.setItem(row, 4, QTableWidgetItem(device['speed']))
-            self.ui.usbTable.setItem(row, 5, QTableWidgetItem(device['vid_pid']))
+            self.ui.usbTable.setItem(row, 0, self.create_table_item(device['name']))
+            self.ui.usbTable.setItem(row, 1, self.create_table_item(device['manufacturer']))
+            self.ui.usbTable.setItem(row, 2, self.create_table_item(device['serial']))
+            self.ui.usbTable.setItem(row, 3, self.create_table_item(device['bus']))
+            self.ui.usbTable.setItem(row, 4, self.create_table_item(device['speed']))
+            self.ui.usbTable.setItem(row, 5, self.create_table_item(device['vid_pid']))
         
         self.statusBar().showMessage(f"✅ 找到 {len(devices)} 个 USB 设备")
     
@@ -109,12 +122,12 @@ class USBManagerWindow(QMainWindow):
         self.ui.drivesTable.setRowCount(len(drives))
         
         for row, drive in enumerate(drives):
-            self.ui.drivesTable.setItem(row, 0, QTableWidgetItem(drive['name']))
-            self.ui.drivesTable.setItem(row, 1, QTableWidgetItem(drive['path']))
-            self.ui.drivesTable.setItem(row, 2, QTableWidgetItem(drive['filesystem']))
-            self.ui.drivesTable.setItem(row, 3, QTableWidgetItem(drive['total']))
-            self.ui.drivesTable.setItem(row, 4, QTableWidgetItem(drive['used']))
-            self.ui.drivesTable.setItem(row, 5, QTableWidgetItem(drive['free']))
+            self.ui.drivesTable.setItem(row, 0, self.create_table_item(drive['name']))
+            self.ui.drivesTable.setItem(row, 1, self.create_table_item(drive['path']))
+            self.ui.drivesTable.setItem(row, 2, self.create_table_item(drive['filesystem']))
+            self.ui.drivesTable.setItem(row, 3, self.create_table_item(drive['total']))
+            self.ui.drivesTable.setItem(row, 4, self.create_table_item(drive['used']))
+            self.ui.drivesTable.setItem(row, 5, self.create_table_item(drive['free']))
         
         self.statusBar().showMessage(f"✅ 找到 {len(drives)} 个存储设备")
     
@@ -122,11 +135,32 @@ class USBManagerWindow(QMainWindow):
         """驱动器选中事件"""
         selected_items = self.ui.drivesTable.selectedItems()
         if selected_items:
+            # 获取选中行的信息
             row = selected_items[0].row()
+            name = self.ui.drivesTable.item(row, 0).text()
             drive_path = self.ui.drivesTable.item(row, 1).text()
+            
             self.selected_drive = drive_path
             self.refresh_file_list()
+            
+            # 更新界面上的选中状态标签
+            status_text = f"📂 当前设备: {name} ({drive_path})"
+            self.ui.selectedDriveLabel1.setText(status_text)
+            self.ui.selectedDriveLabel2.setText(status_text)
+            self.ui.selectedDriveLabel1.setStyleSheet("color: #00695C; font-weight: bold; padding-left: 5px;")
+            self.ui.selectedDriveLabel2.setStyleSheet("color: #00695C; font-weight: bold; padding-left: 5px;")
+            
             self.statusBar().showMessage(f"📁 已选择: {drive_path}")
+        else:
+            # 未选中任何设备时重置
+            self.selected_drive = None
+            self.ui.filesTable.setRowCount(0)
+            
+            reset_text = "当前设备: 未选择"
+            self.ui.selectedDriveLabel1.setText(reset_text)
+            self.ui.selectedDriveLabel2.setText(reset_text)
+            self.ui.selectedDriveLabel1.setStyleSheet("color: #666; font-weight: bold; padding-left: 5px;")
+            self.ui.selectedDriveLabel2.setStyleSheet("color: #666; font-weight: bold; padding-left: 5px;")
     
     def refresh_file_list(self):
         """刷新文件列表"""
@@ -139,9 +173,9 @@ class USBManagerWindow(QMainWindow):
         self.ui.filesTable.setRowCount(len(files))
         
         for row, file_info in enumerate(files):
-            self.ui.filesTable.setItem(row, 0, QTableWidgetItem(file_info['name']))
-            self.ui.filesTable.setItem(row, 1, QTableWidgetItem(file_info['type']))
-            self.ui.filesTable.setItem(row, 2, QTableWidgetItem(file_info['size']))
+            self.ui.filesTable.setItem(row, 0, self.create_table_item(file_info['name']))
+            self.ui.filesTable.setItem(row, 1, self.create_table_item(file_info['type']))
+            self.ui.filesTable.setItem(row, 2, self.create_table_item(file_info['size']))
             
             # 添加删除按钮
             if not file_info['is_dir']:
@@ -195,35 +229,28 @@ class USBManagerWindow(QMainWindow):
         # 创建传输线程
         self.transfer_thread = FileTransferThread(str(source_path), str(dest_path))
         self.transfer_thread.progress.connect(self.update_progress)
-        self.transfer_thread.speed.connect(self.update_speed)
         self.transfer_thread.finished.connect(self.transfer_finished)
-        self.transfer_thread.error.connect(self.transfer_error)
         self.transfer_thread.start()
         
         self.statusBar().showMessage(f"📤 正在上传: {source_path.name}")
     
-    def update_progress(self, value):
+    def update_progress(self, value, speed):
         """更新进度"""
         self.ui.progressBar.setValue(value)
+        self.ui.speedLabel.setText(f"传输速度: {speed}")
     
-    def update_speed(self, speed):
-        """更新传输速度"""
-        self.ui.speedLabel.setText(f"传输速度: {speed:.2f} MB/s")
-    
-    def transfer_finished(self):
+    def transfer_finished(self, success, message):
         """传输完成"""
         self.ui.progressBar.setVisible(False)
         self.ui.speedLabel.setVisible(False)
-        self.refresh_file_list()
-        QMessageBox.information(self, "成功", "文件上传成功！")
-        self.statusBar().showMessage("✅ 文件上传成功")
-    
-    def transfer_error(self, error_msg):
-        """传输错误"""
-        self.ui.progressBar.setVisible(False)
-        self.ui.speedLabel.setVisible(False)
-        QMessageBox.critical(self, "错误", f"文件上传失败: {error_msg}")
-        self.statusBar().showMessage(f"❌ 上传失败: {error_msg}")
+        
+        if success:
+            self.refresh_file_list()
+            QMessageBox.information(self, "成功", "文件上传成功！")
+            self.statusBar().showMessage("✅ 文件上传成功")
+        else:
+            QMessageBox.critical(self, "错误", f"文件上传失败: {message}")
+            self.statusBar().showMessage(f"❌ 上传失败: {message}")
     
     def delete_file(self, file_path):
         """删除文件"""

@@ -12,7 +12,7 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(1600, 1000)
+        MainWindow.resize(1200, 900)
         self.centralwidget = QtWidgets.QWidget(parent=MainWindow)
         self.centralwidget.setObjectName("centralwidget")
         self.verticalLayout = QtWidgets.QVBoxLayout(self.centralwidget)
@@ -58,11 +58,18 @@ class Ui_MainWindow(object):
         spacerItem1 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Minimum)
         self.horizontalLayout_2.addItem(spacerItem1)
         self.verticalLayout_2.addLayout(self.horizontalLayout_2)
+        
+        # USB Table Configuration
         self.usbTable = QtWidgets.QTableWidget(parent=self.usbTab)
         self.usbTable.setAlternatingRowColors(True)
         self.usbTable.setObjectName("usbTable")
         self.usbTable.setColumnCount(6)
         self.usbTable.setRowCount(0)
+        # Set Read-Only and Row Selection
+        self.usbTable.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.usbTable.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
+        self.usbTable.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.SingleSelection)
+        
         item = QtWidgets.QTableWidgetItem()
         self.usbTable.setHorizontalHeaderItem(0, item)
         item = QtWidgets.QTableWidgetItem()
@@ -77,11 +84,15 @@ class Ui_MainWindow(object):
         self.usbTable.setHorizontalHeaderItem(5, item)
         self.verticalLayout_2.addWidget(self.usbTable)
         self.tabWidget.addTab(self.usbTab, "")
+        
+        # --- Drive Tab ---
         self.driveTab = QtWidgets.QWidget()
         self.driveTab.setObjectName("driveTab")
         self.verticalLayout_3 = QtWidgets.QVBoxLayout(self.driveTab)
         self.verticalLayout_3.setSpacing(15)
         self.verticalLayout_3.setObjectName("verticalLayout_3")
+        
+        # 1. Drives Group Box (Top)
         self.drivesGroupBox = QtWidgets.QGroupBox(parent=self.driveTab)
         self.drivesGroupBox.setObjectName("drivesGroupBox")
         self.verticalLayout_4 = QtWidgets.QVBoxLayout(self.drivesGroupBox)
@@ -94,12 +105,18 @@ class Ui_MainWindow(object):
         spacerItem2 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Minimum)
         self.horizontalLayout_3.addItem(spacerItem2)
         self.verticalLayout_4.addLayout(self.horizontalLayout_3)
+        
         self.drivesTable = QtWidgets.QTableWidget(parent=self.drivesGroupBox)
         self.drivesTable.setMaximumSize(QtCore.QSize(16777215, 200))
         self.drivesTable.setAlternatingRowColors(True)
         self.drivesTable.setObjectName("drivesTable")
         self.drivesTable.setColumnCount(6)
         self.drivesTable.setRowCount(0)
+        # Set Read-Only and Row Selection
+        self.drivesTable.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.drivesTable.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
+        self.drivesTable.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.SingleSelection)
+        
         item = QtWidgets.QTableWidgetItem()
         self.drivesTable.setHorizontalHeaderItem(0, item)
         item = QtWidgets.QTableWidgetItem()
@@ -114,11 +131,53 @@ class Ui_MainWindow(object):
         self.drivesTable.setHorizontalHeaderItem(5, item)
         self.verticalLayout_4.addWidget(self.drivesTable)
         self.verticalLayout_3.addWidget(self.drivesGroupBox)
+        
+        # 2. File List Group Box (MOVED TO MIDDLE)
+        self.filesGroupBox = QtWidgets.QGroupBox(parent=self.driveTab)
+        self.filesGroupBox.setObjectName("filesGroupBox")
+        self.verticalLayout_6 = QtWidgets.QVBoxLayout(self.filesGroupBox)
+        self.verticalLayout_6.setObjectName("verticalLayout_6")
+        
+        # ADDED: Label to show selected drive in File List
+        self.selectedDriveLabel1 = QtWidgets.QLabel(parent=self.filesGroupBox)
+        self.selectedDriveLabel1.setStyleSheet("color: #666; font-weight: bold; padding-left: 5px;")
+        self.selectedDriveLabel1.setObjectName("selectedDriveLabel1")
+        self.verticalLayout_6.addWidget(self.selectedDriveLabel1)
+        
+        self.filesTable = QtWidgets.QTableWidget(parent=self.filesGroupBox)
+        self.filesTable.setAlternatingRowColors(True)
+        self.filesTable.setObjectName("filesTable")
+        self.filesTable.setColumnCount(4)
+        self.filesTable.setRowCount(0)
+        # Set Read-Only and Row Selection
+        self.filesTable.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.filesTable.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
+        self.filesTable.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.SingleSelection)
+
+        item = QtWidgets.QTableWidgetItem()
+        self.filesTable.setHorizontalHeaderItem(0, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.filesTable.setHorizontalHeaderItem(1, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.filesTable.setHorizontalHeaderItem(2, item)
+        item = QtWidgets.QTableWidgetItem()
+        self.filesTable.setHorizontalHeaderItem(3, item)
+        self.verticalLayout_6.addWidget(self.filesTable)
+        self.verticalLayout_3.addWidget(self.filesGroupBox)
+
+        # 3. File Operations Group Box (MOVED TO BOTTOM)
         self.fileOpsGroupBox = QtWidgets.QGroupBox(parent=self.driveTab)
         self.fileOpsGroupBox.setObjectName("fileOpsGroupBox")
         self.verticalLayout_5 = QtWidgets.QVBoxLayout(self.fileOpsGroupBox)
         self.verticalLayout_5.setSpacing(12)
         self.verticalLayout_5.setObjectName("verticalLayout_5")
+        
+        # ADDED: Label to show selected drive in File Operations
+        self.selectedDriveLabel2 = QtWidgets.QLabel(parent=self.fileOpsGroupBox)
+        self.selectedDriveLabel2.setStyleSheet("color: #666; font-weight: bold; padding-left: 5px;")
+        self.selectedDriveLabel2.setObjectName("selectedDriveLabel2")
+        self.verticalLayout_5.addWidget(self.selectedDriveLabel2)
+        
         self.horizontalLayout_4 = QtWidgets.QHBoxLayout()
         self.horizontalLayout_4.setObjectName("horizontalLayout_4")
         self.filenameLabel = QtWidgets.QLabel(parent=self.fileOpsGroupBox)
@@ -157,25 +216,7 @@ class Ui_MainWindow(object):
         self.horizontalLayout_6.addWidget(self.speedLabel)
         self.verticalLayout_5.addLayout(self.horizontalLayout_6)
         self.verticalLayout_3.addWidget(self.fileOpsGroupBox)
-        self.filesGroupBox = QtWidgets.QGroupBox(parent=self.driveTab)
-        self.filesGroupBox.setObjectName("filesGroupBox")
-        self.verticalLayout_6 = QtWidgets.QVBoxLayout(self.filesGroupBox)
-        self.verticalLayout_6.setObjectName("verticalLayout_6")
-        self.filesTable = QtWidgets.QTableWidget(parent=self.filesGroupBox)
-        self.filesTable.setAlternatingRowColors(True)
-        self.filesTable.setObjectName("filesTable")
-        self.filesTable.setColumnCount(4)
-        self.filesTable.setRowCount(0)
-        item = QtWidgets.QTableWidgetItem()
-        self.filesTable.setHorizontalHeaderItem(0, item)
-        item = QtWidgets.QTableWidgetItem()
-        self.filesTable.setHorizontalHeaderItem(1, item)
-        item = QtWidgets.QTableWidgetItem()
-        self.filesTable.setHorizontalHeaderItem(2, item)
-        item = QtWidgets.QTableWidgetItem()
-        self.filesTable.setHorizontalHeaderItem(3, item)
-        self.verticalLayout_6.addWidget(self.filesTable)
-        self.verticalLayout_3.addWidget(self.filesGroupBox)
+        
         self.tabWidget.addTab(self.driveTab, "")
         self.verticalLayout.addWidget(self.tabWidget)
         self.verticalLayout.setStretch(1, 1)
@@ -221,15 +262,10 @@ class Ui_MainWindow(object):
         item.setText(_translate("MainWindow", "已使用"))
         item = self.drivesTable.horizontalHeaderItem(5)
         item.setText(_translate("MainWindow", "可用空间"))
-        self.fileOpsGroupBox.setTitle(_translate("MainWindow", "📝 文件操作"))
-        self.filenameLabel.setText(_translate("MainWindow", "📄 文件名:"))
-        self.filenameInput.setText(_translate("MainWindow", "test.txt"))
-        self.textContent.setPlaceholderText(_translate("MainWindow", "在此输入要写入的文本内容..."))
-        self.writeTextBtn.setText(_translate("MainWindow", "💾 写入文本文件"))
-        self.uploadFileBtn.setText(_translate("MainWindow", "📤 上传文件到 U 盘"))
-        self.showHiddenCheck.setText(_translate("MainWindow", "👁️ 显示隐藏文件"))
-        self.speedLabel.setText(_translate("MainWindow", "传输速度: 0 MB/s"))
         self.filesGroupBox.setTitle(_translate("MainWindow", "📂 文件列表"))
+        # Set default text for new labels
+        self.selectedDriveLabel1.setText(_translate("MainWindow", "当前设备: 未选择"))
+        
         item = self.filesTable.horizontalHeaderItem(0)
         item.setText(_translate("MainWindow", "文件名"))
         item = self.filesTable.horizontalHeaderItem(1)
@@ -238,4 +274,15 @@ class Ui_MainWindow(object):
         item.setText(_translate("MainWindow", "大小"))
         item = self.filesTable.horizontalHeaderItem(3)
         item.setText(_translate("MainWindow", "操作"))
+        self.fileOpsGroupBox.setTitle(_translate("MainWindow", "📝 文件操作"))
+        # Set default text for new labels
+        self.selectedDriveLabel2.setText(_translate("MainWindow", "当前设备: 未选择"))
+
+        self.filenameLabel.setText(_translate("MainWindow", "📄 文件名:"))
+        self.filenameInput.setText(_translate("MainWindow", "test.txt"))
+        self.textContent.setPlaceholderText(_translate("MainWindow", "在此输入要写入的文本内容..."))
+        self.writeTextBtn.setText(_translate("MainWindow", "💾 写入文本文件"))
+        self.uploadFileBtn.setText(_translate("MainWindow", "📤 上传文件到 U 盘"))
+        self.showHiddenCheck.setText(_translate("MainWindow", "👁️ 显示隐藏文件"))
+        self.speedLabel.setText(_translate("MainWindow", "传输速度: 0 MB/s"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.driveTab), _translate("MainWindow", "💾 U 盘管理"))
