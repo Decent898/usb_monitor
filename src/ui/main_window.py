@@ -7,7 +7,10 @@
 
 import getpass
 from pathlib import Path
-from PyQt6.QtWidgets import QMainWindow, QTableWidgetItem, QFileDialog, QMessageBox, QPushButton, QHeaderView
+from PyQt6.QtWidgets import (
+    QMainWindow, QTableWidgetItem, QFileDialog, QMessageBox, 
+    QPushButton, QHeaderView, QWidget, QHBoxLayout, QLabel, QInputDialog
+)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
 
@@ -15,6 +18,7 @@ from .usb_manager_ui import Ui_MainWindow
 from ..core.usb_scanner import USBScanner
 from ..core.drive_manager import DriveManager
 from ..core.file_transfer import FileTransferThread
+from ..core.speed_tester import SpeedTestThread
 from .styles import AppStyles
 
 
@@ -31,6 +35,8 @@ class USBManagerWindow(QMainWindow):
         # 数据
         self.selected_drive = None
         self.transfer_thread = None
+        self.speed_test_thread = None  # 测速线程
+        self.speed_test_results = {}   # 新增：用于存储测速结果 {device_key: result_text}
         
         # 应用样式
         self.apply_styles()
@@ -75,10 +81,34 @@ class USBManagerWindow(QMainWindow):
         self.ui.progressBar.setVisible(False)
         self.ui.speedLabel.setVisible(False)
 
-        # 设置表格列宽自适应 - 让所有表格的列充满宽度
-        self.ui.usbTable.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.ui.drivesTable.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.ui.filesTable.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        # --- 优化表格列宽设置 (修复拉伸方向反向的问题) ---
+        
+        # 1. USB 设备表
+        usb_header = self.ui.usbTable.horizontalHeader()
+        # 关键修改：全部设置为交互模式，取消第一列的 Stretch
+        usb_header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        # 让最后一列自动填充剩余空间，而不是挤压第一列
+        usb_header.setStretchLastSection(True)
+        
+        # 设置特定列的初始宽度
+        self.ui.usbTable.setColumnWidth(0, 200)  # 设备名称
+        self.ui.usbTable.setColumnWidth(1, 150)  # 制造商
+        self.ui.usbTable.setColumnWidth(2, 120)  # 序列号
+        self.ui.usbTable.setColumnWidth(3, 100)  # 总线
+        self.ui.usbTable.setColumnWidth(4, 260)  # 传输速度
+        self.ui.usbTable.setColumnWidth(5, 120)  # VID:PID (确保宽度足够显示)
+
+        # 2. U盘列表
+        drive_header = self.ui.drivesTable.horizontalHeader()
+        drive_header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        drive_header.setStretchLastSection(True)
+        self.ui.drivesTable.setColumnWidth(0, 200) # 设备名称
+        
+        # 3. 文件列表
+        file_header = self.ui.filesTable.horizontalHeader()
+        file_header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        file_header.setStretchLastSection(True)
+        self.ui.filesTable.setColumnWidth(0, 300) # 文件名
     
     def connect_signals(self):
         """连接信号和槽"""
@@ -97,6 +127,49 @@ class USBManagerWindow(QMainWindow):
         item.setToolTip(item_text)
         return item
     
+    def create_speed_test_widget(self, initial_text, device_info, device_key):
+        """
+        创建包含 '文本 + 按钮' 的自定义 Widget
+        用于 USB 传输速度列
+        """
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(5, 2, 5, 2)
+        layout.setSpacing(5)
+        
+        # 显示速度的标签
+        label = QLabel(initial_text)
+        label.setToolTip(initial_text)
+        
+        # 测速按钮
+        btn = QPushButton("🚀 测速")
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setFixedSize(60, 24)
+        # 简单样式
+        btn.setStyleSheet("""
+            QPushButton {
+                background-color: #00897B; 
+                color: white; 
+                border-radius: 4px;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #00695C; }
+            QPushButton:disabled { background-color: #ccc; }
+        """)
+        
+        # 连接点击事件 (使用 lambda 传递上下文，包含 device_key 以便后续保存)
+        btn.clicked.connect(lambda: self.start_speed_test(device_info, label, btn, device_key))
+        
+        layout.addWidget(label)
+        layout.addWidget(btn)
+        
+        # 让 Label 占据剩余空间
+        layout.setStretch(0, 1)
+        layout.setStretch(1, 0)
+        
+        return widget
+
     def scan_usb_devices(self):
         """扫描 USB 设备"""
         self.statusBar().showMessage("🔄 正在扫描 USB 设备...")
@@ -109,11 +182,139 @@ class USBManagerWindow(QMainWindow):
             self.ui.usbTable.setItem(row, 1, self.create_table_item(device['manufacturer']))
             self.ui.usbTable.setItem(row, 2, self.create_table_item(device['serial']))
             self.ui.usbTable.setItem(row, 3, self.create_table_item(device['bus']))
-            self.ui.usbTable.setItem(row, 4, self.create_table_item(device['speed']))
+            
+            # --- 核心修改: 防止重叠 ---
+            # 必须显式移除当前单元格的 Widget，否则如果设备类型变化，旧 Widget 会残留
+            self.ui.usbTable.removeCellWidget(row, 4)
+            
+            # 生成唯一的设备 Key
+            serial = device.get('serial', 'N/A')
+            if serial and serial != 'N/A':
+                device_key = serial
+            else:
+                device_key = f"{device['name']}_{device['vid_pid']}"
+            
+            # 如果是存储设备，显示测速按钮
+            if device['bus'] == 'USB Storage' or 'Storage' in device['bus']:
+                # 检查是否有历史测速结果
+                display_text = self.speed_test_results.get(device_key, device['speed'])
+                speed_widget = self.create_speed_test_widget(display_text, device, device_key)
+                self.ui.usbTable.setCellWidget(row, 4, speed_widget)
+            else:
+                # 普通设备只显示文本
+                self.ui.usbTable.setItem(row, 4, self.create_table_item(device['speed']))
+            
             self.ui.usbTable.setItem(row, 5, self.create_table_item(device['vid_pid']))
         
         self.statusBar().showMessage(f"✅ 找到 {len(devices)} 个 USB 设备")
     
+    def start_speed_test(self, device_info, label_widget, btn_widget, device_key):
+        """
+        开始测速流程
+        """
+        # 1. 立即停止自动刷新
+        self.timer.stop()
+        
+        try:
+            # 2. 获取所有已挂载的 U 盘
+            mounted_drives = DriveManager.scan_mounted_drives()
+            
+            if not mounted_drives:
+                QMessageBox.warning(self, "无法测速", "未检测到已挂载的 U 盘卷。\n请确保 U 盘已正确格式化并分配了盘符。")
+                self.timer.start(10000) # 恢复刷新
+                return
+
+            target_path = None
+            
+            # 3. 确定测速目标盘符
+            if len(mounted_drives) == 1:
+                drive = mounted_drives[0]
+                reply = QMessageBox.question(
+                    self, "确认测速目标", 
+                    f"准备对以下磁盘进行测速，是否继续？\n\n名称: {drive['name']}\n路径: {drive['path']}",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    target_path = drive['path']
+                else:
+                    self.timer.start(10000) # 恢复刷新
+                    return
+            else:
+                drive_names = [f"{d['name']} ({d['path']})" for d in mounted_drives]
+                item, ok = QInputDialog.getItem(
+                    self, "选择测速目标", 
+                    f"检测到多个 U 盘，请选择对应 '{device_info['name']}' 的挂载路径:", 
+                    drive_names, 0, False
+                )
+                if ok and item:
+                    selected_idx = drive_names.index(item)
+                    target_path = mounted_drives[selected_idx]['path']
+                else:
+                    self.timer.start(10000) # 恢复刷新
+                    return
+
+            if not target_path:
+                self.timer.start(10000)
+                return
+
+            # 4. 准备 UI 状态
+            try:
+                original_text = label_widget.text()
+                btn_widget.setEnabled(False)
+                btn_widget.setText("测试中...")
+                label_widget.setText("准备中...")
+            except RuntimeError:
+                self.timer.start(10000)
+                return
+            
+            # 5. 创建并启动线程
+            self.speed_test_thread = SpeedTestThread(target_path)
+            
+            # 进度回调
+            def on_progress(status, percent):
+                try:
+                    label_widget.setText(status)
+                except RuntimeError:
+                    pass 
+            
+            # 完成回调
+            def on_finished(result_text):
+                try:
+                    label_widget.setText(result_text)
+                    label_widget.setToolTip(result_text)
+                    btn_widget.setText("🚀 测速")
+                    btn_widget.setEnabled(True)
+                    
+                    self.speed_test_results[device_key] = result_text
+                    
+                    QMessageBox.information(self, "测速完成", f"设备: {device_info['name']}\n{result_text}")
+                except RuntimeError:
+                    pass
+                finally:
+                    self.timer.start(10000)
+            
+            # 错误回调
+            def on_error(err_msg):
+                try:
+                    label_widget.setText("测试失败")
+                    btn_widget.setText("重试")
+                    btn_widget.setEnabled(True)
+                    QMessageBox.critical(self, "测速失败", err_msg)
+                except RuntimeError:
+                    pass
+                finally:
+                    self.timer.start(10000)
+
+            self.speed_test_thread.progress_update.connect(on_progress)
+            self.speed_test_thread.test_finished.connect(on_finished)
+            self.speed_test_thread.error_occurred.connect(on_error)
+            
+            self.speed_test_thread.start()
+            
+        except Exception as e:
+            print(f"Error starting speed test: {e}")
+            self.timer.start(10000)
+
     def scan_mounted_drives(self):
         """扫描已挂载的驱动器"""
         self.statusBar().showMessage("🔄 正在扫描 U 盘...")
@@ -135,7 +336,6 @@ class USBManagerWindow(QMainWindow):
         """驱动器选中事件"""
         selected_items = self.ui.drivesTable.selectedItems()
         if selected_items:
-            # 获取选中行的信息
             row = selected_items[0].row()
             name = self.ui.drivesTable.item(row, 0).text()
             drive_path = self.ui.drivesTable.item(row, 1).text()
@@ -143,24 +343,24 @@ class USBManagerWindow(QMainWindow):
             self.selected_drive = drive_path
             self.refresh_file_list()
             
-            # 更新界面上的选中状态标签
-            status_text = f"📂 当前设备: {name} ({drive_path})"
-            self.ui.selectedDriveLabel1.setText(status_text)
-            self.ui.selectedDriveLabel2.setText(status_text)
-            self.ui.selectedDriveLabel1.setStyleSheet("color: #00695C; font-weight: bold; padding-left: 5px;")
-            self.ui.selectedDriveLabel2.setStyleSheet("color: #00695C; font-weight: bold; padding-left: 5px;")
+            if hasattr(self.ui, 'selectedDriveLabel1'):
+                status_text = f"📂 当前设备: {name} ({drive_path})"
+                self.ui.selectedDriveLabel1.setText(status_text)
+                self.ui.selectedDriveLabel2.setText(status_text)
+                self.ui.selectedDriveLabel1.setStyleSheet("color: #00695C; font-weight: bold; padding-left: 5px;")
+                self.ui.selectedDriveLabel2.setStyleSheet("color: #00695C; font-weight: bold; padding-left: 5px;")
             
             self.statusBar().showMessage(f"📁 已选择: {drive_path}")
         else:
-            # 未选中任何设备时重置
             self.selected_drive = None
             self.ui.filesTable.setRowCount(0)
             
-            reset_text = "当前设备: 未选择"
-            self.ui.selectedDriveLabel1.setText(reset_text)
-            self.ui.selectedDriveLabel2.setText(reset_text)
-            self.ui.selectedDriveLabel1.setStyleSheet("color: #666; font-weight: bold; padding-left: 5px;")
-            self.ui.selectedDriveLabel2.setStyleSheet("color: #666; font-weight: bold; padding-left: 5px;")
+            if hasattr(self.ui, 'selectedDriveLabel1'):
+                reset_text = "当前设备: 未选择"
+                self.ui.selectedDriveLabel1.setText(reset_text)
+                self.ui.selectedDriveLabel2.setText(reset_text)
+                self.ui.selectedDriveLabel1.setStyleSheet("color: #666; font-weight: bold; padding-left: 5px;")
+                self.ui.selectedDriveLabel2.setStyleSheet("color: #666; font-weight: bold; padding-left: 5px;")
     
     def refresh_file_list(self):
         """刷新文件列表"""
@@ -177,7 +377,6 @@ class USBManagerWindow(QMainWindow):
             self.ui.filesTable.setItem(row, 1, self.create_table_item(file_info['type']))
             self.ui.filesTable.setItem(row, 2, self.create_table_item(file_info['size']))
             
-            # 添加删除按钮
             if not file_info['is_dir']:
                 delete_btn = QPushButton("🗑️ 删除")
                 delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -221,12 +420,10 @@ class USBManagerWindow(QMainWindow):
         source_path = Path(file_path)
         dest_path = Path(self.selected_drive) / source_path.name
         
-        # 显示进度条
         self.ui.progressBar.setVisible(True)
         self.ui.speedLabel.setVisible(True)
         self.ui.progressBar.setValue(0)
         
-        # 创建传输线程
         self.transfer_thread = FileTransferThread(str(source_path), str(dest_path))
         self.transfer_thread.progress.connect(self.update_progress)
         self.transfer_thread.finished.connect(self.transfer_finished)
@@ -234,23 +431,23 @@ class USBManagerWindow(QMainWindow):
         
         self.statusBar().showMessage(f"📤 正在上传: {source_path.name}")
     
-    def update_progress(self, progress_percent, speed_text):
-        """更新进度和速度"""
-        self.ui.progressBar.setValue(progress_percent)
-        self.ui.speedLabel.setText(f"传输速度: {speed_text}")
+    def update_progress(self, value, speed):
+        """更新进度"""
+        self.ui.progressBar.setValue(value)
+        self.ui.speedLabel.setText(f"传输速度: {speed}")
     
     def transfer_finished(self, success, message):
         """传输完成"""
         self.ui.progressBar.setVisible(False)
         self.ui.speedLabel.setVisible(False)
-        self.refresh_file_list()
         
         if success:
-            QMessageBox.information(self, "成功", message)
-            self.statusBar().showMessage(f"✅ {message}")
+            self.refresh_file_list()
+            QMessageBox.information(self, "成功", "文件上传成功！")
+            self.statusBar().showMessage("✅ 文件上传成功")
         else:
-            QMessageBox.warning(self, "失败", message)
-            self.statusBar().showMessage(f"❌ {message}")
+            QMessageBox.critical(self, "错误", f"文件上传失败: {message}")
+            self.statusBar().showMessage(f"❌ 上传失败: {message}")
     
     def delete_file(self, file_path):
         """删除文件"""
