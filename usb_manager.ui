@@ -41,15 +41,15 @@
       <layout class="QHBoxLayout" name="horizontalLayout">
        <item>
         <widget class="QLabel" name="titleLabel">
-         <property name="text">
-          <string>🔌 USB 设备管理器</string>
-         </property>
          <property name="font">
           <font>
            <pointsize>32</pointsize>
            <weight>75</weight>
            <bold>true</bold>
           </font>
+         </property>
+         <property name="text">
+          <string>🔌 USB 设备管理器</string>
          </property>
         </widget>
        </item>
@@ -68,14 +68,15 @@
        </item>
        <item>
         <widget class="QLabel" name="userLabel">
-         <property name="text">
-          <string>👤 用户: User</string>
-         </property>
          <property name="font">
           <font>
            <pointsize>15</pointsize>
            <weight>50</weight>
+           <bold>false</bold>
           </font>
+         </property>
+         <property name="text">
+          <string>👤 用户: User</string>
          </property>
         </widget>
        </item>
@@ -85,7 +86,7 @@
     <item>
      <widget class="QTabWidget" name="tabWidget">
       <property name="currentIndex">
-       <number>0</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="usbTab">
        <attribute name="title">
@@ -99,11 +100,11 @@
          <layout class="QHBoxLayout" name="horizontalLayout_2">
           <item>
            <widget class="QPushButton" name="refreshUsbBtn">
-            <property name="text">
-             <string>🔄 刷新设备列表</string>
-            </property>
             <property name="cursor">
              <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="text">
+             <string>🔄 刷新设备列表</string>
             </property>
            </widget>
           </item>

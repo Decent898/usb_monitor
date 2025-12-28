@@ -234,23 +234,23 @@ class USBManagerWindow(QMainWindow):
         
         self.statusBar().showMessage(f"📤 正在上传: {source_path.name}")
     
-    def update_progress(self, value, speed):
-        """更新进度"""
-        self.ui.progressBar.setValue(value)
-        self.ui.speedLabel.setText(f"传输速度: {speed}")
+    def update_progress(self, progress_percent, speed_text):
+        """更新进度和速度"""
+        self.ui.progressBar.setValue(progress_percent)
+        self.ui.speedLabel.setText(f"传输速度: {speed_text}")
     
     def transfer_finished(self, success, message):
         """传输完成"""
         self.ui.progressBar.setVisible(False)
         self.ui.speedLabel.setVisible(False)
+        self.refresh_file_list()
         
         if success:
-            self.refresh_file_list()
-            QMessageBox.information(self, "成功", "文件上传成功！")
-            self.statusBar().showMessage("✅ 文件上传成功")
+            QMessageBox.information(self, "成功", message)
+            self.statusBar().showMessage(f"✅ {message}")
         else:
-            QMessageBox.critical(self, "错误", f"文件上传失败: {message}")
-            self.statusBar().showMessage(f"❌ 上传失败: {message}")
+            QMessageBox.warning(self, "失败", message)
+            self.statusBar().showMessage(f"❌ {message}")
     
     def delete_file(self, file_path):
         """删除文件"""
