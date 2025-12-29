@@ -81,13 +81,13 @@ class USBManagerWindow(QMainWindow):
         self.ui.progressBar.setVisible(False)
         self.ui.speedLabel.setVisible(False)
 
-        # --- 优化表格列宽设置 (修复拉伸方向反向的问题) ---
+        # --- 优化表格列宽设置 ---
         
         # 1. USB 设备表
         usb_header = self.ui.usbTable.horizontalHeader()
-        # 关键修改：全部设置为交互模式，取消第一列的 Stretch
+        # 设置为交互模式，允许用户手动拖动列宽
         usb_header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        # 让最后一列自动填充剩余空间，而不是挤压第一列
+        # 让最后一列自动填充剩余空间
         usb_header.setStretchLastSection(True)
         
         # 设置特定列的初始宽度
@@ -95,8 +95,8 @@ class USBManagerWindow(QMainWindow):
         self.ui.usbTable.setColumnWidth(1, 150)  # 制造商
         self.ui.usbTable.setColumnWidth(2, 120)  # 序列号
         self.ui.usbTable.setColumnWidth(3, 100)  # 总线
-        self.ui.usbTable.setColumnWidth(4, 260)  # 传输速度
-        self.ui.usbTable.setColumnWidth(5, 120)  # VID:PID (确保宽度足够显示)
+        self.ui.usbTable.setColumnWidth(4, 350)  # 传输速度 (增加宽度以容纳长文本)
+        self.ui.usbTable.setColumnWidth(5, 120)  # VID:PID
 
         # 2. U盘列表
         drive_header = self.ui.drivesTable.horizontalHeader()
@@ -121,7 +121,7 @@ class USBManagerWindow(QMainWindow):
 
     def create_table_item(self, text):
         """创建一个带有工具提示的表格项"""
-        item_text = str(text)
+        item_text = str(text) if text else ""
         item = QTableWidgetItem(item_text)
         # 设置工具提示，当鼠标悬停时显示完整内容
         item.setToolTip(item_text)
@@ -183,8 +183,7 @@ class USBManagerWindow(QMainWindow):
             self.ui.usbTable.setItem(row, 2, self.create_table_item(device['serial']))
             self.ui.usbTable.setItem(row, 3, self.create_table_item(device['bus']))
             
-            # --- 核心修改: 防止重叠 ---
-            # 必须显式移除当前单元格的 Widget，否则如果设备类型变化，旧 Widget 会残留
+            # 移除当前单元格的旧 Widget，防止残留
             self.ui.usbTable.removeCellWidget(row, 4)
             
             # 生成唯一的设备 Key
@@ -200,6 +199,10 @@ class USBManagerWindow(QMainWindow):
                 display_text = self.speed_test_results.get(device_key, device['speed'])
                 speed_widget = self.create_speed_test_widget(display_text, device, device_key)
                 self.ui.usbTable.setCellWidget(row, 4, speed_widget)
+                
+                # 【核心修复】: 显式设置一个空的 Item，清除底层可能存在的 "N/A" 文本
+                # 这样可以防止文字重叠显示
+                self.ui.usbTable.setItem(row, 4, QTableWidgetItem(""))
             else:
                 # 普通设备只显示文本
                 self.ui.usbTable.setItem(row, 4, self.create_table_item(device['speed']))
@@ -323,9 +326,13 @@ class USBManagerWindow(QMainWindow):
         self.ui.drivesTable.setRowCount(len(drives))
         
         for row, drive in enumerate(drives):
-            self.ui.drivesTable.setItem(row, 0, self.create_table_item(drive['name']))
+            # 获取驱动器信息，如果为空则显示默认值
+            name = drive['name'] if drive['name'] else "未知设备"
+            fs = drive['filesystem'] if drive['filesystem'] else "未知"
+            
+            self.ui.drivesTable.setItem(row, 0, self.create_table_item(name))
             self.ui.drivesTable.setItem(row, 1, self.create_table_item(drive['path']))
-            self.ui.drivesTable.setItem(row, 2, self.create_table_item(drive['filesystem']))
+            self.ui.drivesTable.setItem(row, 2, self.create_table_item(fs))
             self.ui.drivesTable.setItem(row, 3, self.create_table_item(drive['total']))
             self.ui.drivesTable.setItem(row, 4, self.create_table_item(drive['used']))
             self.ui.drivesTable.setItem(row, 5, self.create_table_item(drive['free']))
