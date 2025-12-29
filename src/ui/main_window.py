@@ -32,6 +32,14 @@ class USBManagerWindow(QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         
+        # --- 新增：手动添加取消按钮 ---
+        self.cancelBtn = QPushButton("✖ 取消")
+        self.cancelBtn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.cancelBtn.setVisible(False)  # 默认隐藏
+        self.cancelBtn.setFixedSize(80, 30)
+        # 将按钮添加到进度条布局中 (horizontalLayout_6 包含 progressBar 和 speedLabel)
+        self.ui.horizontalLayout_6.addWidget(self.cancelBtn)
+        
         # 数据
         self.selected_drive = None
         self.transfer_thread = None
@@ -77,6 +85,19 @@ class USBManagerWindow(QMainWindow):
         self.ui.writeTextBtn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.ui.uploadFileBtn.setCursor(Qt.CursorShape.PointingHandCursor)
         
+        # 设置取消按钮样式 (使用危险色)
+        self.cancelBtn.setStyleSheet("""
+            QPushButton {
+                background-color: #D32F2F;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #B71C1C; }
+            QPushButton:disabled { background-color: #E0E0E0; color: #9E9E9E; }
+        """)
+        
         # 隐藏进度相关控件
         self.ui.progressBar.setVisible(False)
         self.ui.speedLabel.setVisible(False)
@@ -118,6 +139,9 @@ class USBManagerWindow(QMainWindow):
         self.ui.uploadFileBtn.clicked.connect(self.upload_file)
         self.ui.showHiddenCheck.stateChanged.connect(self.refresh_file_list)
         self.ui.drivesTable.itemSelectionChanged.connect(self.on_drive_selected)
+        
+        # 连接取消按钮
+        self.cancelBtn.clicked.connect(self.cancel_transfer)
 
     def create_table_item(self, text):
         """创建一个带有工具提示的表格项"""
@@ -431,10 +455,18 @@ class USBManagerWindow(QMainWindow):
         source_path = Path(file_path)
         dest_path = Path(self.selected_drive) / source_path.name
         
+        # 显示进度条和取消按钮
         self.ui.progressBar.setVisible(True)
         self.ui.speedLabel.setVisible(True)
+        self.cancelBtn.setVisible(True)
+        self.cancelBtn.setEnabled(True)
+        self.cancelBtn.setText("✖ 取消")
         self.ui.progressBar.setValue(0)
         
+        # 禁用上传按钮防止重复操作
+        self.ui.uploadFileBtn.setEnabled(False)
+        
+        # 创建传输线程
         self.transfer_thread = FileTransferThread(str(source_path), str(dest_path))
         self.transfer_thread.progress.connect(self.update_progress)
         self.transfer_thread.finished.connect(self.transfer_finished)
@@ -442,6 +474,14 @@ class USBManagerWindow(QMainWindow):
         
         self.statusBar().showMessage(f"📤 正在上传: {source_path.name}")
     
+    def cancel_transfer(self):
+        """取消当前传输"""
+        if self.transfer_thread and self.transfer_thread.isRunning():
+            self.cancelBtn.setText("正在停止...")
+            self.cancelBtn.setEnabled(False)
+            self.transfer_thread.cancel()
+            self.statusBar().showMessage("正在取消传输...")
+
     def update_progress(self, value, speed):
         """更新进度"""
         self.ui.progressBar.setValue(value)
@@ -451,14 +491,22 @@ class USBManagerWindow(QMainWindow):
         """传输完成"""
         self.ui.progressBar.setVisible(False)
         self.ui.speedLabel.setVisible(False)
+        self.cancelBtn.setVisible(False)
+        self.ui.uploadFileBtn.setEnabled(True)
         
         if success:
             self.refresh_file_list()
             QMessageBox.information(self, "成功", "文件上传成功！")
             self.statusBar().showMessage("✅ 文件上传成功")
         else:
-            QMessageBox.critical(self, "错误", f"文件上传失败: {message}")
-            self.statusBar().showMessage(f"❌ 上传失败: {message}")
+            # 如果是用户取消的，提示不同
+            if "取消" in message:
+                self.statusBar().showMessage(f"⚠️ {message}")
+                QMessageBox.information(self, "已取消", "文件传输已取消")
+            else:
+                QMessageBox.critical(self, "错误", f"文件上传失败: {message}")
+                self.statusBar().showMessage(f"❌ 上传失败: {message}")
+            self.refresh_file_list() # 刷新以移除可能残留的部分文件
     
     def delete_file(self, file_path):
         """删除文件"""
