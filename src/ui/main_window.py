@@ -200,8 +200,7 @@ class USBManagerWindow(QMainWindow):
                 speed_widget = self.create_speed_test_widget(display_text, device, device_key)
                 self.ui.usbTable.setCellWidget(row, 4, speed_widget)
                 
-                # 【核心修复】: 显式设置一个空的 Item，清除底层可能存在的 "N/A" 文本
-                # 这样可以防止文字重叠显示
+                # 显式设置一个空的 Item，清除底层可能存在的 "N/A" 文本
                 self.ui.usbTable.setItem(row, 4, QTableWidgetItem(""))
             else:
                 # 普通设备只显示文本
@@ -384,9 +383,14 @@ class USBManagerWindow(QMainWindow):
             self.ui.filesTable.setItem(row, 1, self.create_table_item(file_info['type']))
             self.ui.filesTable.setItem(row, 2, self.create_table_item(file_info['size']))
             
+            # 【核心修复】: 无论是不是文件，都先移除可能存在的旧按钮
+            # 防止从 "文件列表" (有按钮) 切换到 "文件夹列表" (无按钮) 时出现幽灵按钮
+            self.ui.filesTable.removeCellWidget(row, 3)
+            
             if not file_info['is_dir']:
                 delete_btn = QPushButton("🗑️ 删除")
                 delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                # 使用 lambda 参数默认值 path=file_info['path'] 确保绑定的是当前循环的文件路径
                 delete_btn.clicked.connect(lambda checked, path=file_info['path']: self.delete_file(path))
                 self.ui.filesTable.setCellWidget(row, 3, delete_btn)
     
