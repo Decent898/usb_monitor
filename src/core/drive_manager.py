@@ -97,12 +97,6 @@ class DriveManager:
     def _get_drive_info(volume: Path) -> Optional[Dict[str, str]]:
         """
         获取驱动器详细信息
-        
-        Args:
-            volume: 卷路径
-            
-        Returns:
-            驱动器信息字典，如果获取失败则返回 None
         """
         try:
             # 获取磁盘使用情况
@@ -114,10 +108,23 @@ class DriveManager:
             # 获取文件系统类型
             filesystem = DriveManager._get_filesystem_type(volume)
             
+            # 获取设备名称 (卷标)
+            # Windows 下 Path('E:/').name 是空的，需要特殊处理
+            name = volume.name
+            if not name and platform.system() == "Windows":
+                name = DriveManager._get_windows_volume_label(volume)
+            
+            # 如果还是获取不到，显示为 本地磁盘 (X:)
+            if not name:
+                if platform.system() == "Windows":
+                    name = f"本地磁盘 ({str(volume)[0]}:)"
+                else:
+                    name = str(volume)
+
             return {
-                'name': volume.name,
+                'name': name,
                 'path': str(volume),
-                'filesystem': filesystem,
+                'filesystem': filesystem if filesystem else "未知",
                 'total': f"{total_gb:.2f} GB",
                 'used': f"{used_gb:.2f} GB",
                 'free': f"{free_gb:.2f} GB",
@@ -128,17 +135,33 @@ class DriveManager:
         except Exception as e:
             print(f"获取驱动器信息失败 {volume}: {str(e)}")
             return None
+
+    @staticmethod
+    def _get_windows_volume_label(volume: Path) -> str:
+        """获取 Windows 卷标"""
+        try:
+            drive_letter = str(volume)[0]
+            result = subprocess.run(
+                f'wmic logicaldisk where name="{drive_letter}:" get VolumeName',
+                capture_output=True,
+                text=True,
+                timeout=2,
+                shell=True,
+                encoding='gbk'
+            )
+            if result.returncode == 0:
+                # 过滤空行并获取第二行 (第一行是标题 VolumeName)
+                lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+                if len(lines) > 1:
+                    return lines[1]
+        except:
+            pass
+        return ""
     
     @staticmethod
     def _get_filesystem_type(volume: Path) -> str:
         """
         获取文件系统类型
-        
-        Args:
-            volume: 卷路径
-            
-        Returns:
-            文件系统类型字符串
         """
         system = platform.system()
         
@@ -172,16 +195,17 @@ class DriveManager:
                 )
                 
                 if result.returncode == 0:
-                    lines = result.stdout.strip().split('\n')
-                    if len(lines) >= 2:
-                        return lines[1].strip()
+                    # 更加健壮的解析：去除空行，取第二行
+                    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+                    if len(lines) > 1:
+                        return lines[1]
             except Exception:
                 pass
         
         elif system == "Linux":
             try:
                 result = subprocess.run(
-                    ['df', str(volume)],
+                    ['df', '-T', str(volume)],
                     capture_output=True,
                     text=True,
                     timeout=5
@@ -191,8 +215,8 @@ class DriveManager:
                     lines = result.stdout.strip().split('\n')
                     if len(lines) >= 2:
                         parts = lines[1].split()
-                        if len(parts) >= 1:
-                            return parts[0]
+                        if len(parts) >= 2:
+                            return parts[1] # df -T 输出的第二列是类型
             except Exception:
                 pass
         
