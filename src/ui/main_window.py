@@ -125,11 +125,21 @@ class USBManagerWindow(QMainWindow):
         drive_header.setStretchLastSection(True)
         self.ui.drivesTable.setColumnWidth(0, 200) # 设备名称
         
-        # 3. 文件列表
+        # 3. 文件列表 (修改部分)
         file_header = self.ui.filesTable.horizontalHeader()
-        file_header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        file_header.setStretchLastSection(True)
-        self.ui.filesTable.setColumnWidth(0, 300) # 文件名
+        
+        # 设置第一列(文件名)为自动拉伸，占据所有剩余空间
+        file_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        
+        # 设置其他列为交互模式(固定宽度但可手动调整)
+        file_header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+        file_header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
+        file_header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
+        
+        # 设置具体的像素宽度
+        self.ui.filesTable.setColumnWidth(1, 120)  # 类型
+        self.ui.filesTable.setColumnWidth(2, 100)  # 大小
+        self.ui.filesTable.setColumnWidth(3, 100)  # 操作
     
     def connect_signals(self):
         """连接信号和槽"""
