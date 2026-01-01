@@ -138,24 +138,46 @@ class DriveManager:
 
     @staticmethod
     def _get_windows_volume_label(volume: Path) -> str:
-        """获取 Windows 卷标"""
+        """获取 Windows 卷标 (支持 WMIC CSV 和 PowerShell 回退)"""
+        drive_letter = str(volume)[0]
+        
+        # 方法 1: 尝试 WMIC (CSV格式) - 增加 errors='ignore' 防止乱码崩溃
         try:
-            drive_letter = str(volume)[0]
             result = subprocess.run(
-                f'wmic logicaldisk where name="{drive_letter}:" get VolumeName',
+                f'wmic logicaldisk where name="{drive_letter}:" get VolumeName /format:csv',
                 capture_output=True,
                 text=True,
                 timeout=2,
                 shell=True,
-                encoding='gbk'
+                encoding='gbk',
+                errors='ignore'
             )
             if result.returncode == 0:
-                # 过滤空行并获取第二行 (第一行是标题 VolumeName)
                 lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-                if len(lines) > 1:
-                    return lines[1]
+                if len(lines) >= 2:
+                    header = lines[0].split(',')
+                    values = lines[1].split(',')
+                    for i, col in enumerate(header):
+                        if 'VolumeName' in col and i < len(values):
+                            return values[i].strip()
         except:
             pass
+            
+        # 方法 2: PowerShell 回退 (更稳健)
+        try:
+            ps_cmd = f"(Get-Volume -DriveLetter {drive_letter}).FileSystemLabel"
+            result = subprocess.run(
+                ["powershell", "-Command", ps_cmd],
+                capture_output=True,
+                text=True,
+                timeout=3,
+                shell=True
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip()
+        except:
+            pass
+            
         return ""
     
     @staticmethod
@@ -182,23 +204,46 @@ class DriveManager:
                 pass
         
         elif system == "Windows":
+            drive_letter = str(volume)[0]
+            
+            # 方法 1: 使用 wmic 获取文件系统类型 (CSV模式)
             try:
-                # 使用 wmic 获取文件系统类型
-                drive_letter = str(volume)[0]
                 result = subprocess.run(
-                    f'wmic logicaldisk where name="{drive_letter}:" get filesystem',
+                    f'wmic logicaldisk where name="{drive_letter}:" get FileSystem /format:csv',
                     capture_output=True,
                     text=True,
                     timeout=5,
                     shell=True,
-                    encoding='gbk'
+                    encoding='gbk',
+                    errors='ignore'
                 )
                 
                 if result.returncode == 0:
-                    # 更加健壮的解析：去除空行，取第二行
                     lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-                    if len(lines) > 1:
-                        return lines[1]
+                    if len(lines) >= 2:
+                        header = lines[0].split(',')
+                        values = lines[1].split(',')
+                        for i, col in enumerate(header):
+                            if 'FileSystem' in col and i < len(values):
+                                fs = values[i].strip()
+                                if fs:
+                                    return fs
+            except Exception:
+                pass
+            
+            # 方法 2: PowerShell 回退 (解决 Win11 兼容性)
+            try:
+                # 获取文件系统类型，例如 "NTFS", "FAT32"
+                ps_cmd = f"(Get-Volume -DriveLetter {drive_letter}).FileSystem"
+                result = subprocess.run(
+                    ["powershell", "-Command", ps_cmd],
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                    shell=True
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    return result.stdout.strip()
             except Exception:
                 pass
         
