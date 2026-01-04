@@ -376,6 +376,15 @@ class USBScanner:
         """
         在 macOS 上扫描 USB 设备
         """
+        # 首先获取已挂载的存储设备列表（用于识别存储设备）
+        from pathlib import Path
+        mounted_volumes = set()
+        volumes_path = Path('/Volumes')
+        if volumes_path.exists():
+            for volume in volumes_path.iterdir():
+                if volume.name != 'Macintosh HD' and not volume.name.startswith('.'):
+                    mounted_volumes.add(volume.name)
+        
         try:
             result = subprocess.run(
                 ['system_profiler', 'SPUSBDataType', '-json'],
@@ -386,7 +395,7 @@ class USBScanner:
             
             if result.returncode == 0:
                 data = json.loads(result.stdout)
-                USBScanner._parse_macos_usb_data(data, devices)
+                USBScanner._parse_macos_usb_data(data, devices, mounted_volumes)
                 
         except subprocess.TimeoutExpired:
             print(f"扫描超时（{timeout}秒）")
@@ -437,24 +446,45 @@ class USBScanner:
             print(f"扫描超时（{timeout}秒）")
     
     @staticmethod
-    def _parse_macos_usb_data(data: dict, devices: list, bus_name: str = "USB") -> None:
+    def _parse_macos_usb_data(data: dict, devices: list, mounted_volumes: set, bus_name: str = "USB") -> None:
         if 'SPUSBDataType' in data:
             for bus in data['SPUSBDataType']:
                 if '_items' in bus:
                     USBScanner._parse_macos_usb_items(
                         bus['_items'], 
-                        devices, 
+                        devices,
+                        mounted_volumes,
                         bus.get('_name', 'USB')
                     )
     
     @staticmethod
-    def _parse_macos_usb_items(items: list, devices: list, bus_name: str = "USB") -> None:
+    def _parse_macos_usb_items(items: list, devices: list, mounted_volumes: set, bus_name: str = "USB") -> None:
         for item in items:
+            name = item.get('_name', 'Unknown Device')
+            
+            # 判断是否为存储设备（多重判断逻辑）
+            name_lower = name.lower()
+            
+            # 方法1: 通过关键词判断（扩展关键词列表）
+            storage_keywords = ['mass storage', 'disk', 'storage', 'flash', 'card reader', 
+                              'usb drive', 'thumb drive', 'pen drive', 'removable', 'media']
+            has_storage_keyword = any(keyword in name_lower for keyword in storage_keywords)
+            
+            # 方法2: 检查是否有挂载的卷（如果设备名匹配任何挂载卷）
+            has_mounted_volume = any(vol.lower() in name_lower or name_lower in vol.lower() 
+                                    for vol in mounted_volumes)
+            
+            # 方法3: 检查是否有 BSD 名称（存储设备通常有这个）
+            has_bsd_name = 'bsd_name' in item
+            
+            # 综合判断
+            is_storage = has_storage_keyword or has_mounted_volume or has_bsd_name
+            
             device_info = {
-                'name': item.get('_name', 'Unknown Device'),
+                'name': name,
                 'manufacturer': item.get('manufacturer', 'N/A'),
                 'serial': item.get('serial_num', 'N/A'),
-                'bus': bus_name,
+                'bus': 'USB Storage' if is_storage else bus_name,  # 标记存储设备
                 'speed': item.get('device_speed', 'N/A'),
                 'vid_pid': f"{item.get('vendor_id', 'N/A')}:{item.get('product_id', 'N/A')}"
             }
@@ -463,6 +493,7 @@ class USBScanner:
             if '_items' in item:
                 USBScanner._parse_macos_usb_items(
                     item['_items'], 
-                    devices, 
+                    devices,
+                    mounted_volumes,
                     item.get('_name', bus_name)
                 )

@@ -248,7 +248,11 @@ class USBManagerWindow(QMainWindow):
                     device_key = f"{device['name']}_{device['vid_pid']}"
                 
                 # 如果是存储设备，显示测速按钮
-                if device['bus'] == 'USB Storage' or 'Storage' in device['bus']:
+                device_name_lower = device['name'].lower()
+                is_storage_device = (device['bus'] == 'USB Storage' or 'Storage' in device['bus'] or
+                                   any(keyword in device_name_lower for keyword in ['mass storage', 'disk', 'storage', 'flash', 'card reader']))
+                
+                if is_storage_device:
                     # 检查是否有历史测速结果
                     display_text = self.speed_test_results.get(device_key, device['speed'])
                     speed_widget = self.create_speed_test_widget(display_text, device, device_key)
